@@ -13,6 +13,7 @@ TERMINAL = {"completed", "needs_human_review", "warm_handoff_ready",
             "permanently_failed", "cancelled_or_superseded"}
 
 RESULT_STATE = {"SUCCESS": "completed",
+                "RETRYABLE": "retry_scheduled",
                 "PERMANENT_FAILURE": "permanently_failed",
                 "NEEDS_HUMAN": "needs_human_review",
                 "WARM_HANDOFF": "warm_handoff_ready"}
@@ -21,10 +22,15 @@ MESSAGE_FIELDS = {"id", "idempotency_key", "source", "created_at"}
 
 WORKFLOW_VERSION = "engine-0.1.0"
 
+WORKABLE = {"queued", "retry_scheduled"}
+
+MAX_ATTEMPTS = 3
+
 
 def record(job, state, reason, kit, events, actor="automation",
            result=None, channel=None, attempt=0):
-    """The only way a job changes state. Always writes one audit event."""
+    """The only way a job changes state. Always writes one audit event.
+    Single door, so persisting jobs here would survive a mid-run crash."""
     item = job["item"]
     job["state"] = state
     job["reason"] = reason
@@ -99,37 +105,6 @@ def reconcile(jobs, kit, events):
             winners[item["id"]] = job
 
 
-MESSAGE_FIELDS = {"id", "idempotency_key", "source", "created_at"}
-
-WORKFLOW_VERSION = "engine-0.1.0"
-
-
-def record(job, state, reason, kit, events, actor="automation",
-           result=None, channel=None, attempt=0):
-    """The only way a job changes state. Always writes one audit event."""
-    item = job["item"]
-    job["state"] = state
-    job["reason"] = reason
-    events.append({
-        "event_id": "evt-%06d" % (len(events) + 1),
-        "correlation_id": "corr-" + item["id"],
-        "work_item_id": item["id"],
-        "tenant": item["tenant"],
-        "ts": kit["case_as_of"],
-        "actor": actor,
-        "schema_version": item.get("schema_version", "1.0"),
-        "workflow_version": WORKFLOW_VERSION,
-        "action": item["action"],
-        "channel": channel,
-        "attempt": attempt,
-        "result": result,
-        "external_ref": job["external_ref"],
-        "artifacts": list(item.get("provided_artifacts", [])),
-        "human_override": None,
-        "disposition": state,
-        "detail": reason,
-    })
-
 
 def same_instruction(a, b):
     """Two rows are the same instruction if everything but the message
@@ -197,8 +172,12 @@ def main():
     events = []
     reconcile(jobs, kit, events)
 
-    for job in jobs:
-        if job["state"] != "queued":
+    while True:
+        job = next((j for j in jobs if j["state"] in WORKABLE), None)
+        if job is None:
+            break
+        if job["attempts"] >= MAX_ATTEMPTS:
+            escalate(job, "retry limit reached after %d attempts" % job["attempts"], kit, events)
             continue
         item = job["item"]
         channels = choose_channel(item, kit)
@@ -210,15 +189,15 @@ def main():
         job["attempts"] += 1
         # retrieve_document and ivr_call take no channel; there is only ever one.
         if action == "claim_status_inquiry":
-            response = gw.claim_status(item, channel=channel, attempt=1, at_minute=0)
+            response = gw.claim_status(item, channel=channel, attempt=job["attempts"], at_minute=0)
         elif action in ("corrected_claim_submission", "appeal_submission"):
-            response = gw.submit(item, channel, item["idempotency_key"], action, attempt=1, at_minute=0)
+            response = gw.submit(item, channel, item["idempotency_key"], action, attempt=job["attempts"], at_minute=0)
         elif action == "document_retrieval":
-            response = gw.retrieve_document(item, attempt=1)
+            response = gw.retrieve_document(item, attempt=job["attempts"])
         else:
-            response = gw.ivr_call(item, attempt=1)
+            response = gw.ivr_call(item, attempt=job["attempts"])
         job["external_ref"] = response.get("external_ref") or job["external_ref"]
-        record(job, RESULT_STATE.get(response["result"], job["state"]),
+        record(job, RESULT_STATE.get(response["result"], "needs_human_review"),
                response.get("detail", ""), kit, events,
                result=response["result"], channel=channel, attempt=job["attempts"])
         print(item["id"].ljust(12), response["result"].ljust(20), "->", job["state"])
