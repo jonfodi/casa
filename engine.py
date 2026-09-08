@@ -40,9 +40,17 @@ for job in jobs:
     if not channels:
         job["state"] = "needs_human_review"
         continue
-    if item["action"] != "claim_status_inquiry":
-        continue
-    response = gw.claim_status(item, channel=channels[0], attempt=1, at_minute=0)
+    channel = channels[0]
+    action = item["action"]
+    # retrieve_document and ivr_call take no channel; there is only ever one.
+    if action == "claim_status_inquiry":
+        response = gw.claim_status(item, channel=channel, attempt=1, at_minute=0)
+    elif action in ("corrected_claim_submission", "appeal_submission"):
+        response = gw.submit(item, channel, item["idempotency_key"], action, attempt=1, at_minute=0)
+    elif action == "document_retrieval":
+        response = gw.retrieve_document(item, attempt=1)
+    else:
+        response = gw.ivr_call(item, attempt=1)
     job["state"] = RESULT_STATE.get(response["result"], job["state"])
     print(item["id"].ljust(12), response["result"].ljust(20), "->", job["state"])
 
