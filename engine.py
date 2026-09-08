@@ -2,6 +2,7 @@
 """Payer-action automation engine."""
 
 import argparse, json, csv, sys, os, collections
+from datetime import date
 
 CHANNEL_COLUMN = {"api": "supports_api_276_277", "portal": "supports_portal",
                   "fax": "supports_fax", "ivr": "supports_ivr",
@@ -91,6 +92,7 @@ def reconcile(jobs, kit, events):
     for job in jobs:
         record(job, "queued", "loaded from batch", kit, events, actor="system")
 
+    as_of = date.fromisoformat(kit["case_as_of"][:10])
     superseded = {j["item"]["supersedes"] for j in jobs if j["item"].get("supersedes")}
     by_key, by_work, winners = {}, {}, {}
 
@@ -113,6 +115,9 @@ def reconcile(jobs, kit, events):
         else:
             by_key[key] = by_work[work] = item["id"]
             winners[item["id"]] = job
+            if item.get("deadline") and date.fromisoformat(item["deadline"]) < as_of:
+                escalate(job, "deadline %s already passed as of %s" % (item["deadline"], as_of),
+                         kit, events)
 
 
 
