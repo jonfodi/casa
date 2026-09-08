@@ -1,4 +1,7 @@
-import json, csv
+import json, csv, sys
+
+sys.path.insert(0, "starter_kit")
+from mock_connectors import MockPayerGateway
 
 CHANNEL_COLUMN = {"api": "supports_api_276_277", "portal": "supports_portal",
                   "fax": "supports_fax", "ivr": "supports_ivr",
@@ -13,6 +16,8 @@ action_channels = {row["action"]: row["valid_channels"].split("|")
 
 payers = {row["payer_id"]: row
           for row in csv.DictReader(open("starter_kit/payer_capability_matrix.csv"))}
+
+gw = MockPayerGateway(starter_kit_dir="starter_kit")
 
 
 def choose_channel(item):
