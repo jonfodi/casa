@@ -1,4 +1,4 @@
-import json, csv, sys
+import json, csv, sys, collections
 
 sys.path.insert(0, "starter_kit")
 from mock_connectors import MockPayerGateway
@@ -8,6 +8,11 @@ CHANNEL_COLUMN = {"api": "supports_api_276_277", "portal": "supports_portal",
                   "clearinghouse": "supports_clearinghouse_837"}
 
 CHANNEL_RANK = ["api", "clearinghouse", "portal", "fax", "ivr", "doc"]
+
+RESULT_STATE = {"SUCCESS": "completed",
+                "PERMANENT_FAILURE": "permanently_failed",
+                "NEEDS_HUMAN": "needs_human_review",
+                "WARM_HANDOFF": "warm_handoff_ready"}
 
 items = [json.loads(line) for line in open("starter_kit/work_items.jsonl")]
 
@@ -38,5 +43,9 @@ for job in jobs:
     if item["action"] != "claim_status_inquiry":
         continue
     response = gw.claim_status(item, channel=channels[0], attempt=1, at_minute=0)
-    print(item["id"].ljust(12), item["payer"].ljust(10), channels[0].ljust(8),
-          response["result"].ljust(20), response["detail"])
+    job["state"] = RESULT_STATE.get(response["result"], job["state"])
+    print(item["id"].ljust(12), response["result"].ljust(20), "->", job["state"])
+
+print()
+for state, n in collections.Counter(j["state"] for j in jobs).most_common():
+    print(f"{n:3}  {state}")
