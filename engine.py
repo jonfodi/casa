@@ -27,6 +27,8 @@ WORKABLE = {"queued", "retry_scheduled"}
 
 MAX_ATTEMPTS = 3
 
+SIDE_EFFECT_ACTIONS = {"corrected_claim_submission", "appeal_submission"}
+
 
 def record(job, state, reason, kit, events, actor="automation",
            result=None, channel=None, attempt=0):
@@ -225,7 +227,10 @@ def main():
         else:
             response = gw.ivr_call(item, attempt=job["attempts"])
         job["external_ref"] = response.get("external_ref") or job["external_ref"]
-        record(job, RESULT_STATE.get(response["result"], "needs_human_review"),
+        state = RESULT_STATE.get(response["result"], "needs_human_review")
+        if response["result"] == "AMBIGUOUS" and action not in SIDE_EFFECT_ACTIONS:
+            state = "awaiting_external_response"
+        record(job, state,
                response.get("detail", ""), kit, events,
                result=response["result"], channel=channel, attempt=job["attempts"])
         print(item["id"].ljust(12), response["result"].ljust(20), "->", job["state"])
