@@ -20,6 +20,10 @@ def choose_channel(job):
 
 
 for job in jobs:
-    allowed = action_channels[job["action"]]
-    print(job["id"].ljust(12), job["action"].ljust(28), job["payer"].ljust(10),
-          str(allowed).ljust(30), "->", choose_channel(job))
+    job["state"] = "queued"
+
+for job in jobs:
+    channels = choose_channel(job)
+    if not channels:
+        job["state"] = "needs_human_review"
+    print(job["id"].ljust(12), job["state"].ljust(20), channels)
