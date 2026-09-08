@@ -75,6 +75,16 @@ def choose_channel(item, kit):
     usable = [c for c in allowed if c not in CHANNEL_COLUMN or payer[CHANNEL_COLUMN[c]] == "Y"]
     return sorted(usable, key=CHANNEL_RANK.index)
 
+def has_room(job, kit, used, minute):
+    """Only api calls are rate limited, per payer per minute."""
+    # Recomputes the channel the work body will pick; fine at this size.
+    channels = choose_channel(job["item"], kit)
+    if not channels or channels[0] != "api":
+        return True
+    limit = int(kit["payers"][job["item"]["payer"]]["api_throttle_per_min"])
+    return limit <= 0 or used.get((job["item"]["payer"], minute), 0) < limit
+
+
 def reconcile(jobs, kit, events):
     """Mark rows that must not be acted on. Covers the cases seen in this
     batch; there may be others."""
@@ -172,13 +182,24 @@ def main():
     events = []
     reconcile(jobs, kit, events)
 
+    minute, used = 0, {}
+
     while True:
-        job = next((j for j in jobs if j["state"] in WORKABLE), None)
-        if job is None:
-            break
-        if job["attempts"] >= MAX_ATTEMPTS:
+        # Three scans of the whole list per pass. Fine at this size, revisit at scale.
+        job = next((j for j in jobs
+                    if j["state"] in WORKABLE and j["attempts"] >= MAX_ATTEMPTS), None)
+        if job:
             escalate(job, "retry limit reached after %d attempts" % job["attempts"], kit, events)
             continue
+
+        job = next((j for j in jobs
+                    if j["state"] in WORKABLE and has_room(j, kit, used, minute)), None)
+        if job is None:
+            if any(j["state"] in WORKABLE for j in jobs):
+                minute += 1
+                continue
+            break
+
         item = job["item"]
         channels = choose_channel(item, kit)
         if not channels:
@@ -187,11 +208,13 @@ def main():
         channel = channels[0]
         action = item["action"]
         job["attempts"] += 1
+        if channel == "api":
+            used[(item["payer"], minute)] = used.get((item["payer"], minute), 0) + 1
         # retrieve_document and ivr_call take no channel; there is only ever one.
         if action == "claim_status_inquiry":
-            response = gw.claim_status(item, channel=channel, attempt=job["attempts"], at_minute=0)
+            response = gw.claim_status(item, channel=channel, attempt=job["attempts"], at_minute=minute)
         elif action in ("corrected_claim_submission", "appeal_submission"):
-            response = gw.submit(item, channel, item["idempotency_key"], action, attempt=job["attempts"], at_minute=0)
+            response = gw.submit(item, channel, item["idempotency_key"], action, attempt=job["attempts"], at_minute=minute)
         elif action == "document_retrieval":
             response = gw.retrieve_document(item, attempt=job["attempts"])
         else:
