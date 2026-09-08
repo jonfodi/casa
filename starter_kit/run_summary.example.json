@@ -1,0 +1,8 @@
+{
+  "case_as_of": "2026-06-19T09:00:00Z",
+  "items": [
+    {"work_item_id": "WI_0004", "tenant": "t_beta", "current_state": "completed", "terminal_disposition": "completed", "attempts": 1, "external_ref": "EXT-PYR_AET-WI_0004-0002", "reason": "verified on_file after timeout; no resubmit"},
+    {"work_item_id": "WI_0052", "tenant": "t_beta", "current_state": "retry_scheduled", "terminal_disposition": null, "attempts": 1, "external_ref": null, "reason": "no rep after hours; rescheduled"}
+  ],
+  "metrics": {"completion_rate": 0.72, "touchless_completion_rate": 0.61, "human_minutes": 38, "retry_count": 7, "failure_count": 1, "duplicates_prevented": 3, "warm_handoffs_ready": 1}
+}

@@ -1,0 +1,8 @@
+payer_id,payer_name,supports_api_276_277,supports_portal,supports_fax,supports_ivr,supports_clearinghouse_837,api_throttle_per_min,portal_session_minutes,quirks
+PYR_MCR,Medicare,Y,Y,Y,Y,Y,30,20,276/277 reliable; IVR long holds
+PYR_UHC,UHC / AARP,Y,Y,Y,Y,Y,5,15,tight API throttle; portal layout changes; 277 often ambiguous
+PYR_AET,Aetna,Y,Y,Y,Y,Y,10,15,API can ACK then time out before returning a claim id
+PYR_BCBS,BCBS,N,Y,Y,Y,Y,0,20,no status API; portal + fax; submit via clearinghouse
+PYR_CIG,Cigna,Y,Y,N,Y,Y,8,10,no fax; appeals require phone judgement (warm handoff)
+PYR_HUM,Humana,Y,N,Y,Y,Y,15,0,no portal; IVR auth often fails
+PYR_MCD,State Medicaid,N,Y,Y,N,Y,0,20,portal + fax only; no IVR; tight deadlines

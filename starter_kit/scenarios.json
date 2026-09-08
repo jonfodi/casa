@@ -1,0 +1,142 @@
+{
+  "SCN_01": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "finalized_paid"
+      }
+    ]
+  },
+  "SCN_02": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "pending_ambiguous"
+      }
+    ]
+  },
+  "SCN_03": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "submit_accepted"
+      }
+    ]
+  },
+  "SCN_04": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "timeout_after_receipt"
+      },
+      {
+        "attempt": 2,
+        "outcome": "submit_accepted"
+      }
+    ]
+  },
+  "SCN_06": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "permanent_reject"
+      }
+    ]
+  },
+  "SCN_07": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "portal_auth_expired"
+      },
+      {
+        "attempt": 2,
+        "outcome": "portal_finalized"
+      }
+    ]
+  },
+  "SCN_08": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "portal_layout_changed"
+      }
+    ]
+  },
+  "SCN_09": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "fax_unconfirmed"
+      }
+    ]
+  },
+  "SCN_10": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "fax_partial"
+      },
+      {
+        "attempt": 2,
+        "outcome": "fax_confirmed"
+      }
+    ]
+  },
+  "SCN_11": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "doc_retrieved"
+      }
+    ]
+  },
+  "SCN_12": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "doc_malformed"
+      }
+    ]
+  },
+  "SCN_13": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "ivr_warm_handoff"
+      }
+    ]
+  },
+  "SCN_14": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "ivr_auth_fail"
+      }
+    ]
+  },
+  "SCN_15": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "ivr_no_rep"
+      }
+    ]
+  },
+  "SCN_16": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "conflict"
+      }
+    ]
+  },
+  "SCN_17": {
+    "responses": [
+      {
+        "attempt": 1,
+        "outcome": "fax_confirmed"
+      }
+    ]
+  }
+}

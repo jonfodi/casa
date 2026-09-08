@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "run_summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_as_of","items","metrics"],
+  "properties": {
+    "case_as_of": {"type": "string", "format": "date-time"},
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["work_item_id","tenant","current_state","terminal_disposition","attempts","reason"],
+        "properties": {
+          "work_item_id":        {"type": "string", "minLength": 1},
+          "tenant":              {"type": "string", "minLength": 1},
+          "current_state":       {"type": "string", "enum": ["queued","in_progress","awaiting_external_response","retry_scheduled","needs_human_review","warm_handoff_ready","completed","permanently_failed","cancelled_or_superseded"]},
+          "terminal_disposition":{"type": ["string","null"], "enum": ["completed","needs_human_review","warm_handoff_ready","permanently_failed","cancelled_or_superseded",null]},
+          "attempts":            {"type": "integer", "minimum": 0},
+          "external_ref":        {"type": ["string","null"]},
+          "reason":              {"type": "string"}
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completion_rate","touchless_completion_rate","human_minutes","retry_count","failure_count","duplicates_prevented","warm_handoffs_ready"],
+      "properties": {
+        "completion_rate":          {"type": "number", "minimum": 0, "maximum": 1},
+        "touchless_completion_rate":{"type": "number", "minimum": 0, "maximum": 1},
+        "human_minutes":            {"type": "number", "minimum": 0},
+        "retry_count":              {"type": "integer", "minimum": 0},
+        "failure_count":            {"type": "integer", "minimum": 0},
+        "duplicates_prevented":     {"type": "integer", "minimum": 0},
+        "warm_handoffs_ready":      {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

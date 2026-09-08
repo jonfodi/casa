@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Office lock files
+~$*
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Engine output and connector ledgers
+output/
+*.jsonl.out
+external_side_effect_ledger.jsonl
+connector_interaction_ledger.jsonl

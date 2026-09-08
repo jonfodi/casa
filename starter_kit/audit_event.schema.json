@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "audit_event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id","correlation_id","work_item_id","tenant","ts","actor","schema_version","workflow_version","action","channel","attempt","result","external_ref","artifacts","human_override","disposition","detail"],
+  "properties": {
+    "event_id":        {"type": "string", "minLength": 1},
+    "correlation_id":  {"type": "string", "minLength": 1, "description": "stable per work item across all its events"},
+    "work_item_id":    {"type": "string", "minLength": 1},
+    "tenant":          {"type": "string", "minLength": 1},
+    "ts":              {"type": "string", "format": "date-time"},
+    "actor":           {"type": "string", "enum": ["automation","human","system"]},
+    "schema_version":  {"type": "string"},
+    "workflow_version":{"type": "string"},
+    "action":          {"type": "string", "enum": ["claim_status_inquiry","corrected_claim_submission","appeal_submission","document_retrieval","payer_followup_call"]},
+    "channel":         {"type": ["string","null"], "enum": ["api","portal","fax","ivr","clearinghouse","doc",null]},
+    "attempt":         {"type": "integer", "minimum": 0},
+    "result":          {"type": ["string","null"], "enum": ["SUCCESS","AMBIGUOUS","RETRYABLE","NEEDS_HUMAN","PERMANENT_FAILURE","WARM_HANDOFF","BLOCKED_MISSING_ARTIFACT","CONFLICT","CHANNEL_UNAVAILABLE","INVALID_CHANNEL_FOR_ACTION",null]},
+    "external_ref":    {"type": ["string","null"]},
+    "artifacts":       {"type": "array", "items": {"type": "string"}},
+    "human_override":  {"type": ["object","null"]},
+    "disposition":     {"type": ["string","null"], "enum": ["queued","in_progress","awaiting_external_response","retry_scheduled","needs_human_review","warm_handoff_ready","completed","permanently_failed","cancelled_or_superseded",null], "description": "current_state or terminal_disposition after this event"},
+    "detail":          {"type": "string"}
+  }
+}

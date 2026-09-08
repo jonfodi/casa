@@ -1,0 +1,6 @@
+action,valid_channels
+claim_status_inquiry,api|portal|ivr
+corrected_claim_submission,clearinghouse|portal
+appeal_submission,fax|portal
+document_retrieval,doc
+payer_followup_call,ivr

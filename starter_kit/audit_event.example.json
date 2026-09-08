@@ -1,0 +1,19 @@
+{
+  "event_id": "evt-000123",
+  "correlation_id": "corr-WI_0004",
+  "work_item_id": "WI_0004",
+  "tenant": "t_beta",
+  "ts": "2026-06-19T09:14:02Z",
+  "actor": "automation",
+  "schema_version": "1.0",
+  "workflow_version": "engine-0.3.1",
+  "action": "corrected_claim_submission",
+  "channel": "clearinghouse",
+  "attempt": 1,
+  "result": "AMBIGUOUS",
+  "external_ref": null,
+  "artifacts": ["corrected_837"],
+  "human_override": null,
+  "disposition": "awaiting_external_response",
+  "detail": "submit timed out after receipt; verifying via submission_status before any resubmit"
+}
