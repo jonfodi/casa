@@ -1,7 +1,7 @@
-import json, csv, sys, os, collections
+#!/usr/bin/env python3
+"""Payer-action automation engine."""
 
-sys.path.insert(0, "starter_kit")
-from mock_connectors import MockPayerGateway, CASE_AS_OF
+import argparse, json, csv, sys, os, collections
 
 CHANNEL_COLUMN = {"api": "supports_api_276_277", "portal": "supports_portal",
                   "fax": "supports_fax", "ivr": "supports_ivr",
@@ -17,23 +17,28 @@ RESULT_STATE = {"SUCCESS": "completed",
                 "NEEDS_HUMAN": "needs_human_review",
                 "WARM_HANDOFF": "warm_handoff_ready"}
 
-items = [json.loads(line) for line in open("starter_kit/work_items.jsonl")]
-
-action_channels = {row["action"]: row["valid_channels"].split("|")
-                   for row in csv.DictReader(open("starter_kit/action_channel_map.csv"))}
-
-payers = {row["payer_id"]: row
-          for row in csv.DictReader(open("starter_kit/payer_capability_matrix.csv"))}
-
-gw = MockPayerGateway(starter_kit_dir="starter_kit")
+MESSAGE_FIELDS = {"id", "idempotency_key", "source", "created_at"}
 
 
-def choose_channel(item):
-    allowed = action_channels[item["action"]]
-    payer = payers[item["payer"]]
+def load_kit(kit_dir):
+    sys.path.insert(0, kit_dir)
+    import mock_connectors
+    return {
+        "case_as_of": mock_connectors.CASE_AS_OF,
+        "gateway_class": mock_connectors.MockPayerGateway,
+        "items": [json.loads(l) for l in open(os.path.join(kit_dir, "work_items.jsonl")) if l.strip()],
+        "action_channels": {r["action"]: r["valid_channels"].split("|") for r in
+                            csv.DictReader(open(os.path.join(kit_dir, "action_channel_map.csv")))},
+        "payers": {r["payer_id"]: r for r in
+                   csv.DictReader(open(os.path.join(kit_dir, "payer_capability_matrix.csv")))},
+    }
+
+
+def choose_channel(item, kit):
+    allowed = kit["action_channels"][item["action"]]
+    payer = kit["payers"][item["payer"]]
     usable = [c for c in allowed if c not in CHANNEL_COLUMN or payer[CHANNEL_COLUMN[c]] == "Y"]
     return sorted(usable, key=CHANNEL_RANK.index)
-
 
 def reconcile(jobs):
     """Mark rows that must not be acted on. Covers the cases seen in this
@@ -83,48 +88,11 @@ def escalate(job, reason):
     job["state"] = "needs_human_review"
     job["reason"] = reason
 
-
-jobs = [{"item": item, "state": "queued", "reason": "", "attempts": 0,
-         "external_ref": None, "duplicate_of": None} for item in items]
-
-reconcile(jobs)
-
-for job in jobs:
-    if job["state"] != "queued":
-        continue
-    item = job["item"]
-    channels = choose_channel(item)
-    if not channels:
-        job["state"] = "needs_human_review"
-        continue
-    channel = channels[0]
-    action = item["action"]
-    job["attempts"] += 1
-    # retrieve_document and ivr_call take no channel; there is only ever one.
-    if action == "claim_status_inquiry":
-        response = gw.claim_status(item, channel=channel, attempt=1, at_minute=0)
-    elif action in ("corrected_claim_submission", "appeal_submission"):
-        response = gw.submit(item, channel, item["idempotency_key"], action, attempt=1, at_minute=0)
-    elif action == "document_retrieval":
-        response = gw.retrieve_document(item, attempt=1)
-    else:
-        response = gw.ivr_call(item, attempt=1)
-    job["state"] = RESULT_STATE.get(response["result"], job["state"])
-    job["reason"] = response.get("detail", "")
-    job["external_ref"] = response.get("external_ref")
-    print(item["id"].ljust(12), response["result"].ljust(20), "->", job["state"])
-
-print()
-for state, n in collections.Counter(j["state"] for j in jobs).most_common():
-    print(f"{n:3}  {state}")
-
-
-def write_run_summary(jobs, out_dir):
-    os.makedirs(out_dir, exist_ok=True)
+def write_run_summary(jobs, kit, out_dir):
     total = len(jobs) or 1
     count = lambda s: sum(1 for j in jobs if j["state"] == s)
     summary = {
-        "case_as_of": CASE_AS_OF,
+        "case_as_of": kit["case_as_of"],
         "items": [{"work_item_id": j["item"]["id"],
                    "tenant": j["item"]["tenant"],
                    "current_state": j["state"],
@@ -145,5 +113,55 @@ def write_run_summary(jobs, out_dir):
     with open(os.path.join(out_dir, "run_summary.json"), "w") as f:
         json.dump(summary, f, indent=2)
 
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--kit", required=True)
+    parser.add_argument("--out", required=True)
+    args = parser.parse_args()
+    os.makedirs(args.out, exist_ok=True)
 
-write_run_summary(jobs, "output")
+    kit = load_kit(args.kit)
+    gw = kit["gateway_class"](
+        starter_kit_dir=args.kit,
+        side_effect_ledger=os.path.join(args.out, "external_side_effect_ledger.jsonl"),
+        interaction_ledger=os.path.join(args.out, "connector_interaction_ledger.jsonl"))
+
+    jobs = [{"item": item, "state": "queued", "reason": "", "attempts": 0,
+             "external_ref": None, "duplicate_of": None} for item in kit["items"]]
+
+    reconcile(jobs)
+
+    for job in jobs:
+        if job["state"] != "queued":
+            continue
+        item = job["item"]
+        channels = choose_channel(item, kit)
+        if not channels:
+            job["state"] = "needs_human_review"
+            continue
+        channel = channels[0]
+        action = item["action"]
+        job["attempts"] += 1
+        # retrieve_document and ivr_call take no channel; there is only ever one.
+        if action == "claim_status_inquiry":
+            response = gw.claim_status(item, channel=channel, attempt=1, at_minute=0)
+        elif action in ("corrected_claim_submission", "appeal_submission"):
+            response = gw.submit(item, channel, item["idempotency_key"], action, attempt=1, at_minute=0)
+        elif action == "document_retrieval":
+            response = gw.retrieve_document(item, attempt=1)
+        else:
+            response = gw.ivr_call(item, attempt=1)
+        job["state"] = RESULT_STATE.get(response["result"], job["state"])
+        job["reason"] = response.get("detail", "")
+        job["external_ref"] = response.get("external_ref")
+        print(item["id"].ljust(12), response["result"].ljust(20), "->", job["state"])
+
+    print()
+    for state, n in collections.Counter(j["state"] for j in jobs).most_common():
+        print(f"{n:3}  {state}")
+
+    write_run_summary(jobs, kit, args.out)
+
+
+if __name__ == "__main__":
+    main()
