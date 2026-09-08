@@ -32,9 +32,39 @@ def choose_channel(item):
     return sorted(usable, key=CHANNEL_RANK.index)
 
 
-jobs = [{"item": item, "state": "queued"} for item in items]
+def reconcile(jobs):
+    """Mark rows that must not be acted on. Covers the cases seen in this
+    batch; there may be others."""
+    superseded = {j["item"]["supersedes"] for j in jobs if j["item"].get("supersedes")}
+    by_key, by_work = {}, {}
+
+    for job in jobs:
+        item = job["item"]
+        key = (item["tenant"], item["idempotency_key"])
+        work = (item["tenant"], item["encounter"], item["action"])
+
+        if item["id"] in superseded:
+            cancel(job, "replaced by a later work item")
+        elif key in by_key:
+            cancel(job, "same instruction already queued as " + by_key[key])
+        elif work in by_work:
+            cancel(job, "same encounter and action already queued as " + by_work[work])
+        else:
+            by_key[key] = by_work[work] = item["id"]
+
+
+def cancel(job, reason):
+    job["state"] = "cancelled_or_superseded"
+    job["reason"] = reason
+
+
+jobs = [{"item": item, "state": "queued", "reason": ""} for item in items]
+
+reconcile(jobs)
 
 for job in jobs:
+    if job["state"] != "queued":
+        continue
     item = job["item"]
     channels = choose_channel(item)
     if not channels:
