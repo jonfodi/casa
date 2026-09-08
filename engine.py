@@ -19,6 +19,35 @@ RESULT_STATE = {"SUCCESS": "completed",
 
 MESSAGE_FIELDS = {"id", "idempotency_key", "source", "created_at"}
 
+WORKFLOW_VERSION = "engine-0.1.0"
+
+
+def record(job, state, reason, kit, events, actor="automation",
+           result=None, channel=None, attempt=0):
+    """The only way a job changes state. Always writes one audit event."""
+    item = job["item"]
+    job["state"] = state
+    job["reason"] = reason
+    events.append({
+        "event_id": "evt-%06d" % (len(events) + 1),
+        "correlation_id": "corr-" + item["id"],
+        "work_item_id": item["id"],
+        "tenant": item["tenant"],
+        "ts": kit["case_as_of"],
+        "actor": actor,
+        "schema_version": item.get("schema_version", "1.0"),
+        "workflow_version": WORKFLOW_VERSION,
+        "action": item["action"],
+        "channel": channel,
+        "attempt": attempt,
+        "result": result,
+        "external_ref": job["external_ref"],
+        "artifacts": list(item.get("provided_artifacts", [])),
+        "human_override": None,
+        "disposition": state,
+        "detail": reason,
+    })
+
 
 def load_kit(kit_dir):
     sys.path.insert(0, kit_dir)
@@ -40,9 +69,12 @@ def choose_channel(item, kit):
     usable = [c for c in allowed if c not in CHANNEL_COLUMN or payer[CHANNEL_COLUMN[c]] == "Y"]
     return sorted(usable, key=CHANNEL_RANK.index)
 
-def reconcile(jobs):
+def reconcile(jobs, kit, events):
     """Mark rows that must not be acted on. Covers the cases seen in this
     batch; there may be others."""
+    for job in jobs:
+        record(job, "queued", "loaded from batch", kit, events, actor="system")
+
     superseded = {j["item"]["supersedes"] for j in jobs if j["item"].get("supersedes")}
     by_key, by_work, winners = {}, {}, {}
 
@@ -52,22 +84,51 @@ def reconcile(jobs):
         work = (item["tenant"], item["encounter"], item["action"])
 
         if item["id"] in superseded:
-            cancel(job, "replaced by a later work item")
+            cancel(job, "replaced by a later work item", kit, events)
         elif key in by_key:
-            cancel(job, "same instruction already queued as " + by_key[key], by_key[key])
+            cancel(job, "same instruction already queued as " + by_key[key], kit, events, by_key[key])
         elif work in by_work:
             other = by_work[work]
             if same_instruction(item, winners[other]["item"]):
-                cancel(job, "same encounter and action already queued as " + other, other)
+                cancel(job, "same encounter and action already queued as " + other, kit, events, other)
             else:
-                escalate(job, "conflicts with " + other + " on the same encounter and action")
-                escalate(winners[other], "conflicts with " + item["id"] + " on the same encounter and action")
+                escalate(job, "conflicts with " + other + " on the same encounter and action", kit, events)
+                escalate(winners[other], "conflicts with " + item["id"] + " on the same encounter and action", kit, events)
         else:
             by_key[key] = by_work[work] = item["id"]
             winners[item["id"]] = job
 
 
 MESSAGE_FIELDS = {"id", "idempotency_key", "source", "created_at"}
+
+WORKFLOW_VERSION = "engine-0.1.0"
+
+
+def record(job, state, reason, kit, events, actor="automation",
+           result=None, channel=None, attempt=0):
+    """The only way a job changes state. Always writes one audit event."""
+    item = job["item"]
+    job["state"] = state
+    job["reason"] = reason
+    events.append({
+        "event_id": "evt-%06d" % (len(events) + 1),
+        "correlation_id": "corr-" + item["id"],
+        "work_item_id": item["id"],
+        "tenant": item["tenant"],
+        "ts": kit["case_as_of"],
+        "actor": actor,
+        "schema_version": item.get("schema_version", "1.0"),
+        "workflow_version": WORKFLOW_VERSION,
+        "action": item["action"],
+        "channel": channel,
+        "attempt": attempt,
+        "result": result,
+        "external_ref": job["external_ref"],
+        "artifacts": list(item.get("provided_artifacts", [])),
+        "human_override": None,
+        "disposition": state,
+        "detail": reason,
+    })
 
 
 def same_instruction(a, b):
@@ -78,15 +139,19 @@ def same_instruction(a, b):
     return strip(a) == strip(b)
 
 
-def cancel(job, reason, duplicate_of=None):
-    job["state"] = "cancelled_or_superseded"
-    job["reason"] = reason
+def cancel(job, reason, kit, events, duplicate_of=None):
     job["duplicate_of"] = duplicate_of
+    record(job, "cancelled_or_superseded", reason, kit, events, actor="system")
 
 
-def escalate(job, reason):
-    job["state"] = "needs_human_review"
-    job["reason"] = reason
+def escalate(job, reason, kit, events):
+    record(job, "needs_human_review", reason, kit, events, actor="system")
+
+def write_audit_log(events, out_dir):
+    with open(os.path.join(out_dir, "audit_log.jsonl"), "w") as f:
+        for event in events:
+            f.write(json.dumps(event) + "\n")
+
 
 def write_run_summary(jobs, kit, out_dir):
     total = len(jobs) or 1
@@ -129,7 +194,8 @@ def main():
     jobs = [{"item": item, "state": "queued", "reason": "", "attempts": 0,
              "external_ref": None, "duplicate_of": None} for item in kit["items"]]
 
-    reconcile(jobs)
+    events = []
+    reconcile(jobs, kit, events)
 
     for job in jobs:
         if job["state"] != "queued":
@@ -137,7 +203,7 @@ def main():
         item = job["item"]
         channels = choose_channel(item, kit)
         if not channels:
-            job["state"] = "needs_human_review"
+            escalate(job, "no channel supports this action for this payer", kit, events)
             continue
         channel = channels[0]
         action = item["action"]
@@ -151,15 +217,17 @@ def main():
             response = gw.retrieve_document(item, attempt=1)
         else:
             response = gw.ivr_call(item, attempt=1)
-        job["state"] = RESULT_STATE.get(response["result"], job["state"])
-        job["reason"] = response.get("detail", "")
-        job["external_ref"] = response.get("external_ref")
+        job["external_ref"] = response.get("external_ref") or job["external_ref"]
+        record(job, RESULT_STATE.get(response["result"], job["state"]),
+               response.get("detail", ""), kit, events,
+               result=response["result"], channel=channel, attempt=job["attempts"])
         print(item["id"].ljust(12), response["result"].ljust(20), "->", job["state"])
 
     print()
     for state, n in collections.Counter(j["state"] for j in jobs).most_common():
         print(f"{n:3}  {state}")
 
+    write_audit_log(events, args.out)
     write_run_summary(jobs, kit, args.out)
 
 
