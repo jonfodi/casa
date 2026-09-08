@@ -36,7 +36,7 @@ def reconcile(jobs):
     """Mark rows that must not be acted on. Covers the cases seen in this
     batch; there may be others."""
     superseded = {j["item"]["supersedes"] for j in jobs if j["item"].get("supersedes")}
-    by_key, by_work = {}, {}
+    by_key, by_work, winners = {}, {}, {}
 
     for job in jobs:
         item = job["item"]
@@ -48,13 +48,35 @@ def reconcile(jobs):
         elif key in by_key:
             cancel(job, "same instruction already queued as " + by_key[key])
         elif work in by_work:
-            cancel(job, "same encounter and action already queued as " + by_work[work])
+            other = by_work[work]
+            if same_instruction(item, winners[other]["item"]):
+                cancel(job, "same encounter and action already queued as " + other)
+            else:
+                escalate(job, "conflicts with " + other + " on the same encounter and action")
+                escalate(winners[other], "conflicts with " + item["id"] + " on the same encounter and action")
         else:
             by_key[key] = by_work[work] = item["id"]
+            winners[item["id"]] = job
+
+
+MESSAGE_FIELDS = {"id", "idempotency_key", "source", "created_at"}
+
+
+def same_instruction(a, b):
+    """Two rows are the same instruction if everything but the message
+    envelope matches. Unknown fields are compared, so we over-flag rather
+    than silently act on the wrong one."""
+    strip = lambda d: {k: v for k, v in d.items() if k not in MESSAGE_FIELDS}
+    return strip(a) == strip(b)
 
 
 def cancel(job, reason):
     job["state"] = "cancelled_or_superseded"
+    job["reason"] = reason
+
+
+def escalate(job, reason):
+    job["state"] = "needs_human_review"
     job["reason"] = reason
 
 
