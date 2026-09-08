@@ -30,8 +30,13 @@ def choose_channel(item):
 jobs = [{"item": item, "state": "queued"} for item in items]
 
 for job in jobs:
-    channels = choose_channel(job["item"])
+    item = job["item"]
+    channels = choose_channel(item)
     if not channels:
         job["state"] = "needs_human_review"
-    print(job["item"]["id"].ljust(12), job["state"].ljust(20),
-          str(channels).ljust(30), "pick:", channels[0] if channels else None)
+        continue
+    if item["action"] != "claim_status_inquiry":
+        continue
+    response = gw.claim_status(item, channel=channels[0], attempt=1, at_minute=0)
+    print(item["id"].ljust(12), item["payer"].ljust(10), channels[0].ljust(8),
+          response["result"].ljust(20), response["detail"])
