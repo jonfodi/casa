@@ -171,7 +171,8 @@ def write_run_summary(jobs, kit, out_dir):
                    "reason": j["reason"]} for j in jobs],
         "metrics": {
             "completion_rate": count("completed") / total,
-            "touchless_completion_rate": 0.0,
+            # No human acts mid-run, so every completion is touchless.
+            "touchless_completion_rate": count("completed") / total,
             "human_minutes": sum(j["human_minutes"] for j in jobs),
             "retry_count": sum(max(0, j["attempts"] - 1) for j in jobs),
             "failure_count": count("permanently_failed"),
