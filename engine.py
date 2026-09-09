@@ -57,7 +57,6 @@ def record(job, state, reason, kit, events, actor="automation",
         "detail": reason,
     })
 
-
 def load_kit(kit_dir):
     sys.path.insert(0, kit_dir)
     import mock_connectors
@@ -70,7 +69,6 @@ def load_kit(kit_dir):
         "payers": {r["payer_id"]: r for r in
                    csv.DictReader(open(os.path.join(kit_dir, "payer_capability_matrix.csv")))},
     }
-
 
 def choose_channel(item, kit):
     allowed = kit["action_channels"][item["action"]]
@@ -86,6 +84,16 @@ def has_room(job, kit, used, minute):
         return True
     limit = int(kit["payers"][job["item"]["payer"]]["api_throttle_per_min"])
     return limit <= 0 or used.get((job["item"]["payer"], minute), 0) < limit
+
+def verify_submission(item, gw):
+    """An ambiguous submit may already have landed. Ask before ever resending."""
+    check = gw.submission_status(item["tenant"], item["idempotency_key"])
+    if not check["on_file"]:
+        return "retry_scheduled", "no submission on file; safe to resend", None
+    if check["disposition"] == "unconfirmed":
+        return ("needs_human_review", "on file but delivery unconfirmed; do not resend",
+                check["external_ref"])
+    return "completed", "verified on file; no resubmit", check["external_ref"]
 
 
 def reconcile(jobs, kit, events):
@@ -121,8 +129,6 @@ def reconcile(jobs, kit, events):
                 escalate(job, "deadline %s already passed as of %s" % (item["deadline"], as_of),
                          kit, events)
 
-
-
 def same_instruction(a, b):
     """Two rows are the same instruction if everything but the message
     envelope matches. Unknown fields are compared, so we over-flag rather
@@ -130,11 +136,9 @@ def same_instruction(a, b):
     strip = lambda d: {k: v for k, v in d.items() if k not in MESSAGE_FIELDS}
     return strip(a) == strip(b)
 
-
 def cancel(job, reason, kit, events, duplicate_of=None):
     job["duplicate_of"] = duplicate_of
     record(job, "cancelled_or_superseded", reason, kit, events, actor="system")
-
 
 def escalate(job, reason, kit, events):
     record(job, "needs_human_review", reason, kit, events, actor="system")
@@ -143,7 +147,6 @@ def write_audit_log(events, out_dir):
     with open(os.path.join(out_dir, "audit_log.jsonl"), "w") as f:
         for event in events:
             f.write(json.dumps(event) + "\n")
-
 
 def write_run_summary(jobs, kit, out_dir):
     total = len(jobs) or 1
@@ -227,11 +230,15 @@ def main():
         else:
             response = gw.ivr_call(item, attempt=job["attempts"])
         job["external_ref"] = response.get("external_ref") or job["external_ref"]
+        detail = response.get("detail", "")
         state = RESULT_STATE.get(response["result"], "needs_human_review")
-        if response["result"] == "AMBIGUOUS" and action not in SIDE_EFFECT_ACTIONS:
-            state = "awaiting_external_response"
-        record(job, state,
-               response.get("detail", ""), kit, events,
+        if response["result"] == "AMBIGUOUS":
+            if action in SIDE_EFFECT_ACTIONS:
+                state, detail, ref = verify_submission(item, gw)
+                job["external_ref"] = ref or job["external_ref"]
+            else:
+                state = "awaiting_external_response"
+        record(job, state, detail, kit, events,
                result=response["result"], channel=channel, attempt=job["attempts"])
         print(item["id"].ljust(12), response["result"].ljust(20), "->", job["state"])
 
