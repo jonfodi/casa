@@ -198,7 +198,7 @@ def main():
 
     jobs = [{"item": item, "state": "queued", "reason": "", "attempts": 0,
              "external_ref": None, "duplicate_of": None,
-             "human_minutes": 0} for item in kit["items"]]
+             "human_minutes": 0, "not_before": 0} for item in kit["items"]]
 
     events = []
     reconcile(jobs, kit, events)
@@ -214,7 +214,9 @@ def main():
             continue
 
         job = next((j for j in jobs
-                    if j["state"] in WORKABLE and has_room(j, kit, used, minute)), None)
+                    if j["state"] in WORKABLE
+                    and j["not_before"] <= minute
+                    and has_room(j, kit, used, minute)), None)
         if job is None:
             if any(j["state"] in WORKABLE for j in jobs):
                 minute += 1
@@ -252,6 +254,8 @@ def main():
                 state = "awaiting_external_response"
         record(job, state, detail, kit, events,
                result=response["result"], channel=channel, attempt=job["attempts"])
+        if state == "retry_scheduled":
+            job["not_before"] = minute + 2 ** (job["attempts"] - 1)
         print(item["id"].ljust(12), response["result"].ljust(20), "->", job["state"])
 
     print()
