@@ -173,7 +173,7 @@ def write_run_summary(jobs, kit, out_dir):
             "completion_rate": count("completed") / total,
             "touchless_completion_rate": 0.0,
             "human_minutes": sum(j["human_minutes"] for j in jobs),
-            "retry_count": 0,
+            "retry_count": sum(max(0, j["attempts"] - 1) for j in jobs),
             "failure_count": count("permanently_failed"),
             "duplicates_prevented": sum(1 for j in jobs if j["duplicate_of"]),
             "warm_handoffs_ready": count("warm_handoff_ready"),
