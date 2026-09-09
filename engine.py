@@ -172,7 +172,7 @@ def write_run_summary(jobs, kit, out_dir):
         "metrics": {
             "completion_rate": count("completed") / total,
             "touchless_completion_rate": 0.0,
-            "human_minutes": 0,
+            "human_minutes": sum(j["human_minutes"] for j in jobs),
             "retry_count": 0,
             "failure_count": count("permanently_failed"),
             "duplicates_prevented": sum(1 for j in jobs if j["duplicate_of"]),
@@ -196,7 +196,8 @@ def main():
         interaction_ledger=os.path.join(args.out, "connector_interaction_ledger.jsonl"))
 
     jobs = [{"item": item, "state": "queued", "reason": "", "attempts": 0,
-             "external_ref": None, "duplicate_of": None} for item in kit["items"]]
+             "external_ref": None, "duplicate_of": None,
+             "human_minutes": 0} for item in kit["items"]]
 
     events = []
     reconcile(jobs, kit, events)
@@ -239,6 +240,7 @@ def main():
         else:
             response = gw.ivr_call(item, attempt=job["attempts"])
         job["external_ref"] = response.get("external_ref") or job["external_ref"]
+        job["human_minutes"] += (response.get("context") or {}).get("hold_minutes", 0)
         detail = handoff_detail(response)
         state = RESULT_STATE.get(response["result"], "needs_human_review")
         if response["result"] == "AMBIGUOUS":
