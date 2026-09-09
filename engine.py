@@ -85,6 +85,15 @@ def has_room(job, kit, used, minute):
     limit = int(kit["payers"][job["item"]["payer"]]["api_throttle_per_min"])
     return limit <= 0 or used.get((job["item"]["payer"], minute), 0) < limit
 
+def handoff_detail(response):
+    """Carry any handoff context forward so a human does not redo the work."""
+    context = response.get("context") or {}
+    if not context:
+        return response.get("detail", "")
+    bundle = "; ".join("%s=%s" % (k, v) for k, v in sorted(context.items()))
+    return "%s | handoff context: %s" % (response.get("detail", ""), bundle)
+
+
 def verify_submission(item, gw):
     """An ambiguous submit may already have landed. Ask before ever resending."""
     check = gw.submission_status(item["tenant"], item["idempotency_key"])
@@ -230,7 +239,7 @@ def main():
         else:
             response = gw.ivr_call(item, attempt=job["attempts"])
         job["external_ref"] = response.get("external_ref") or job["external_ref"]
-        detail = response.get("detail", "")
+        detail = handoff_detail(response)
         state = RESULT_STATE.get(response["result"], "needs_human_review")
         if response["result"] == "AMBIGUOUS":
             if action in SIDE_EFFECT_ACTIONS:
