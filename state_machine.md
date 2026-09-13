@@ -35,7 +35,7 @@ flowchart TD
     L -->|AMBIGUOUS| M{Was it a submission?}
     M -->|No| WAIT([awaiting_external_response])
     M -->|Yes| N[Call submission_status]
-    N --> O{On file?}
+    N --> O{"On file? [5]"}
     O -->|Yes| CONF{Confirmed?}
     O -->|No| RETRY
     CONF -->|Yes| VDONE([completed])
@@ -87,3 +87,5 @@ Rounded boxes are where a job stops.
 - Deadline far away: wait longer between tries. Deadline close: hand off sooner.
 
 Before switching channels on a submission, confirm the first attempt didn't land, or it could be filed twice. Only hand off after every usable channel fails, and list what was tried on each one.
+
+[5] If a submission is not on file, the job is safe to retry.
