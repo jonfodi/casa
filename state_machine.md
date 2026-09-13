@@ -36,7 +36,7 @@ flowchart TD
     M -->|No| WAIT([awaiting_external_response])
     M -->|Yes| N[Call submission_status]
     N --> O{"On file? [5]"}
-    O -->|Yes| CONF{Confirmed?}
+    O -->|Yes| CONF{"Confirmed? [6]"}
     O -->|No| RETRY
     CONF -->|Yes| VDONE([completed])
     CONF -->|No| VHUMAN([needs_human_review])
@@ -89,3 +89,13 @@ Rounded boxes are where a job stops.
 Before switching channels on a submission, confirm the first attempt didn't land, or it could be filed twice. Only hand off after every usable channel fails, and list what was tried on each one.
 
 [5] If a submission is not on file, the job is safe to retry.
+
+[6] In production, an unconfirmed submission would go to its own state, like `sent_awaiting_confirmation`, instead of straight to a person:
+
+1. Wait a set amount of time.
+2. Check with the payer by status check, portal, or phone.
+3. If they have it, mark it `completed`.
+4. If they don't, resend it.
+5. If the deadline is close and it's still unknown, send it to a person.
+
+The schema only allows 9 states, and this engine doesn't come back later to check, so it uses `needs_human_review` today.
