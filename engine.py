@@ -86,8 +86,10 @@ def reconcile_verdicts(items, as_of):
             by_key[key] = by_work[work] = item["id"]
             winners[item["id"]] = item
             if item.get("deadline") and date.fromisoformat(item["deadline"]) < as_of:
+                why = ("filing deadline passed; money may not be recoverable"
+                       if item["action"] in SIDE_EFFECT_ACTIONS else "internal deadline passed")
                 verdicts[item["id"]] = ("needs_human_review",
-                                        "deadline %s already passed as of %s" % (item["deadline"], as_of),
+                                        "%s (deadline %s, as of %s)" % (why, item["deadline"], as_of),
                                         None)
     return verdicts
 
