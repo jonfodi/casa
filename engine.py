@@ -217,7 +217,7 @@ def work(job, kit, gw, events, used, minute):
     item = job["item"]
     channels = choose_channel(item, kit)
     if not channels:
-        apply(job, "needs_human_review", "no channel supports this action for this payer",
+        apply(job, "needs_human_review", "no channel supports this action for this payer; send back to upstream for a different action",
               kit, events, actor="system")
         return
 
