@@ -11,16 +11,16 @@ flowchart TD
     B -->|No| DUP{"Is a redelivered copy?<br/>(tenant, idempotency_key)<br/>already seen"}
     DUP -->|Yes| CANCEL
     DUP -->|No| C{"(tenant, encounter, action)<br/>already seen"}
-    C -->|Yes| MATCH{"Do the details match? *<br/>all fields equal except<br/>id, idempotency_key,<br/>source, created_at"}
+    C -->|Yes| MATCH{"Do the details match? [1]<br/>all fields equal except<br/>id, idempotency_key,<br/>source, created_at"}
     MATCH -->|Yes, duplicate| CANCEL
     MATCH -->|No, send both jobs for review| HUMAN([needs_human_review])
-    C -->|No| D{"Deadline already passed? **"}
+    C -->|No| D{"Deadline already passed? [2]"}
     D -->|Yes| HUMAN
     D -->|No| E["Select channel<br/>action's allowed channels<br/>that the payer supports"]
-    E --> F{"Any channels left? ***"}
+    E --> F{"Any channels left? [3]"}
     F -->|No| HUMAN
-    F -->|Yes| G[Pick the easiest channel to automate]
-    G --> H{Used 3 tries?}
+    F -->|Yes| G[Select ideal channel]
+    G --> H{"Used 3 tries? [4]"}
     H -->|Yes| HUMAN
     H -->|No| I{Waiting after a failure<br/>or API limit hit this minute?}
     I -->|Yes| J[Next minute]
@@ -70,8 +70,19 @@ flowchart TD
 
 Rounded boxes are where a job stops.
 
-\* `source` is ignored. When an ML-engine job and a manually entered job disagree, both go to a human instead of the engine picking one.
+[1] `source` is ignored. When an ML-engine job and a manually entered job disagree, both go to a human instead of the engine picking one.
 
-\*\* A past-due submission or appeal is flagged as money that may not be recoverable. A past-due status check or other action is flagged as an internal deadline.
+[2] A past-due submission or appeal is flagged as money that may not be recoverable. A past-due status check or other action is flagged as an internal deadline.
 
-\*\*\* No usable channel means upstream asked for an action this payer can't receive. In production this would be its own state that goes back to upstream. The schema only allows 9 states, so it uses `needs_human_review` with that reason.
+[3] No usable channel means upstream asked for an action this payer can't receive. In production this would be its own state that goes back to upstream. The schema only allows 9 states, so it uses `needs_human_review` with that reason.
+
+[4] 3 tries then a person is a simplification. In real life the next step depends on why it failed:
+
+- Too many calls: wait, and don't count it as a try.
+- Login expired: log in again and retry the same channel.
+- Channel broken, like a changed portal page or a failed phone login: try the next channel.
+- No rep after hours: retry during the payer's business hours.
+- Payer says pending: check back in days, not minutes.
+- Deadline far away: wait longer between tries. Deadline close: hand off sooner.
+
+Before switching channels on a submission, confirm the first attempt didn't land, or it could be filed twice. Only hand off after every usable channel fails, and list what was tried on each one.
