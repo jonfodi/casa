@@ -27,18 +27,19 @@ flowchart TD
     J --> I
     I -->|No| K[Call the gateway function for the action]
     K --> L{Result}
-    L -->|SUCCESS| DONE([completed])
     L -->|PERMANENT_FAILURE| FAILED([permanently_failed])
-    L -->|NEEDS_HUMAN| HUMAN
     L -->|WARM_HANDOFF| HANDOFF([warm_handoff_ready])
+    L -->|SUCCESS| DONE([completed])
+    L -->|NEEDS_HUMAN| HUMAN
     L -->|RETRYABLE| RETRY[retry_scheduled]
     L -->|AMBIGUOUS| M{Was it a submission?}
     M -->|No| WAIT([awaiting_external_response])
     M -->|Yes| N[Call submission_status]
     N --> O{On file?}
+    O -->|Yes| CONF{Confirmed?}
     O -->|No| RETRY
-    O -->|Yes, confirmed| DONE
-    O -->|Yes, unconfirmed| HUMAN
+    CONF -->|Yes| VDONE([completed])
+    CONF -->|No| VHUMAN([needs_human_review])
     RETRY --> H
 ```
 
